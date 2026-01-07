@@ -3,34 +3,47 @@ const mysql = require('mysql2');
 const cors = require('cors');
 
 const app = express();
-app.use(cors());
+app.use(cors()); // Mengizinkan akses dari S3
 app.use(express.json());
 
+// Konfigurasi Database dari Environment Variables AWS
 const db = mysql.createConnection({
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
-    database: 'akademik_db'
+    database: process.env.DB_NAME || 'akademik_db'
 });
 
-// Jalankan Query untuk membuat tabel otomatis
-db.query(`CREATE TABLE IF NOT EXISTS mahasiswa (
-    nim VARCHAR(15) PRIMARY KEY,
-    nama VARCHAR(100),
-    jurusan VARCHAR(50)
-)`, (err) => { if (err) console.log("Tabel sudah ada / error"); });
+db.connect(err => {
+    if (err) {
+        console.error('Koneksi RDS Gagal:', err.message);
+    } else {
+        console.log('Terhubung ke AWS RDS');
+    }
+});
 
+// Route Utama (Mencegah Cannot GET /)
+app.get('/', (req, res) => {
+    res.json({ message: "API Sistem Akademik Online!" });
+});
+
+// GET: Ambil Data Mahasiswa
 app.get('/mahasiswa', (req, res) => {
     db.query('SELECT * FROM mahasiswa', (err, results) => {
-        res.json(results);
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(results); // Selalu kirim JSON meskipun kosong []
     });
 });
 
+// POST: Tambah Data Mahasiswa
 app.post('/mahasiswa', (req, res) => {
     const { nim, nama, jurusan } = req.body;
-    db.query('INSERT INTO mahasiswa VALUES (?, ?, ?)', [nim, nama, jurusan], (err) => {
-        res.json({ message: 'Berhasil!' });
+    const query = 'INSERT INTO mahasiswa (nim, nama, jurusan) VALUES (?, ?, ?)';
+    db.query(query, [nim, nama, jurusan], (err, result) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ status: "success", message: "Data berhasil disimpan" });
     });
 });
 
-app.listen(8080, () => console.log('Server running on port 8080'));
+const PORT = process.env.PORT || 8080;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
